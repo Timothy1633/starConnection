@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>好莱坞影星关系网 - 词云检索版</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- 引入 D3 词云插件 -->
+    <script src="https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/LIB/d3.layout.cloud.js"></script>
+    <style>
+        :root { --gold: #d4af37; --bg: #0a0a0a; --panel: #121212; --accent: #e50914; }
+        body { background: var(--bg); color: #eee; margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: #000; padding: 10px 30px; display: flex; align-items: center; border-bottom: 2px solid var(--gold); box-shadow: 0 5px 15px rgba(0,0,0,0.5); gap: 20px; z-index: 10; }
+        h1 { color: var(--gold); margin: 0; font-size: 18px; text-transform: uppercase; flex-shrink: 0; }
+        
+        /* 视图切换开关 */
+        .view-toggle { display: flex; background: #1a1a1a; border-radius: 20px; padding: 2px; border: 1px solid #444; margin-left: 10px; }
+        .toggle-btn { padding: 5px 15px; border-radius: 18px; cursor: pointer; font-size: 12px; transition: 0.3s; }
+        .toggle-btn.active { background: var(--gold); color: #000; font-weight: bold; }
+
+        .controls { display: flex; align-items: center; gap: 15px; background: #1a1a1a; padding: 5px 15px; border-radius: 10px; border: 1px solid #333; }
+        .slider-group { display: flex; flex-direction: column; font-size: 11px; color: #aaa; }
+        input[type=range] { width: 80px; accent-color: var(--gold); cursor: pointer; }
+        .search-container { position: relative; width: 220px; margin-left: auto; }
+        #searchInput { width: 100%; padding: 8px 15px; border-radius: 20px; border: 1px solid var(--gold); background: #1a1a1a; color: white; outline: none; }
+        
+        main { display: flex; flex: 1; overflow: hidden; }
+        #viz-container { flex: 1; position: relative; cursor: grab; background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%); }
+        #viz { width: 100%; height: 100%; }
+
+        /* 样式增强 */
+        .dimmed { opacity: 0.05 !important; }
+        .node text { font-size: 11px; fill: #fff; font-weight: bold; text-shadow: 0 0 3px #000; pointer-events: none; }
+        .link { stroke: #666; stroke-opacity: 0.2; cursor: pointer; transition: 0.3s; }
+        .highlight-node { stroke: #fff !important; stroke-width: 3px !important; }
+
+        #side-panel { width: 400px; background: var(--panel); border-left: 1px solid #333; display: flex; flex-direction: column; }
+        #panel-header { padding: 25px; border-bottom: 1px solid #333; }
+        #scroll-area { flex: 1; overflow-y: auto; padding: 10px 25px; }
+        .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; margin-bottom: 5px; }
+        .rank-item:hover { background: #1e1e1e; }
+        .rank-num { width: 22px; height: 22px; background: var(--gold); color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; }
+        .movie-card { background: #1e1e1e; padding: 15px; margin-top: 15px; border-radius: 8px; border-left: 4px solid #333; }
+        .movie-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; font-size: 0.9em; }
+        .translate-btn { font-size: 10px; padding: 1px 5px; background: #333; color: #888; border-radius: 3px; cursor: pointer; }
+        #suggestions { position: absolute; top: 110%; left: 0; right: 0; background: #222; border: 1px solid var(--gold); border-radius: 8px; z-index: 1000; max-height: 300px; overflow-y: auto; display: none; }
+        .sug-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🎬 Star Link</h1>
+    <div class="view-toggle">
+        <div id="btn-graph" class="toggle-btn active" onclick="switchView('graph')">图谱模式</div>
+        <div id="btn-cloud" class="toggle-btn" onclick="switchView('cloud')">词云模式</div>
+    </div>
+    <div class="controls">
+        <div class="slider-group">
+            <label>作品数: <span id="node-val">10</span></label>
+            <input type="range" id="node-filter" min="1" max="100" value="10">
+        </div>
+        <div class="slider-group">
+            <label>合作数: <span id="link-val">1</span></label>
+            <input type="range" id="link-filter" min="1" max="10" value="1">
+        </div>
+    </div>
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="检索影星..." autocomplete="off">
+        <div id="suggestions"></div>
+    </div>
+</header>
+
+<main>
+    <div id="viz-container">
+        <svg id="viz"></svg>
+    </div>
+    <div id="side-panel">
+        <div id="panel-header">
+            <div id="panel-init"></div>
+            <div id="panel-head-content" style="display:none;">
+                <h2 id="display-name" style="margin:0;"></h2>
+                <div id="display-meta" style="color:#888; margin:5px 0 10px 0; font-size:13px;"></div>
+                <button onclick="translateAllMovies()" style="background:none; border:1px solid #555; color:#888; font-size:10px; padding:3px 8px; cursor:pointer;">全页翻译</button>
+                <button onclick="resetFocus()" style="background:none; border:1px solid #555; color:#888; font-size:10px; padding:3px 8px; cursor:pointer; margin-left:5px;">关闭详情</button>
+            </div>
+        </div>
+        <div id="scroll-area"><div id="display-list"></div></div>
+    </div>
+</main>
+
+<script>
+    let rawData = { nodes: [], links: [] };
+    let filteredNodes = [], filteredLinks = [];
+    let currentView = 'graph'; // 'graph' or 'cloud'
+    const width = window.innerWidth - 400, height = window.innerHeight - 70;
+    
+    const svg = d3.select("#viz");
+    const container = svg.append("g").attr("class", "main-container");
+    const cloudContainer = svg.append("g").attr("class", "cloud-container").attr("visibility", "hidden");
+
+    const zoom = d3.zoom().scaleExtent([0.1, 8]).on("zoom", (e) => {
+        if(currentView === 'graph') container.attr("transform", e.transform);
+    });
+    svg.call(zoom);
+
+    const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(120))
+        .force("charge", d3.forceManyBody().strength(-400))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collide", d3.forceCollide().radius(40));
+
+    async function init() {
+        try {
+            const res = await fetch('network_data.json');
+            rawData = await res.json();
+            d3.select("#node-filter").attr("max", d3.max(rawData.nodes, d => d.count));
+            d3.select("#link-filter").attr("max", d3.max(rawData.links, d => d.value));
+            updateGraph();
+            setupSearch();
+            d3.selectAll("input[type=range]").on("input", updateGraph);
+        } catch(e) { alert("请确保数据已生成并在服务器环境下运行。"); }
+    }
+
+    function switchView(view) {
+        currentView = view;
+        d3.selectAll(".toggle-btn").classed("active", false);
+        d3.select(`#btn-${view}`).classed("active", true);
+        
+        if(view === 'graph') {
+            container.attr("visibility", "visible");
+            cloudContainer.attr("visibility", "hidden");
+            simulation.alpha(0.3).restart();
+        } else {
+            container.attr("visibility", "hidden");
+            cloudContainer.attr("visibility", "visible");
+            simulation.stop();
+            renderWordCloud();
+        }
+    }
+
+    function updateGraph() {
+        const minM = +document.getElementById("node-filter").value;
+        const minC = +document.getElementById("link-filter").value;
+        document.getElementById("node-val").innerText = minM;
+        document.getElementById("link-val").innerText = minC;
+
+        const candidates = rawData.nodes.filter(n => n.count >= minM);
+        const cIds = new Set(candidates.map(n => n.id));
+
+        const tLinks = rawData.links.filter(l => {
+            const s = typeof l.source === 'object' ? l.source.id : l.source;
+            const t = typeof l.target === 'object' ? l.target.id : l.target;
+            return cIds.has(s) && cIds.has(t) && l.value >= minC;
+        });
+
+        const activeIds = new Set();
+        tLinks.forEach(l => {
+            activeIds.add(typeof l.source === 'object' ? l.source.id : l.source);
+            activeIds.add(typeof l.target === 'object' ? l.target.id : l.target);
+        });
+
+        filteredNodes = candidates.filter(n => activeIds.has(n.id));
+        filteredLinks = tLinks;
+
+        renderGraph();
+        updateLeaderboard();
+        if(currentView === 'cloud') renderWordCloud();
+    }
+
+    function renderGraph() {
+        const link = container.selectAll(".link")
+            .data(filteredLinks, d => `${d.source.id || d.source}-${d.target.id || d.target}`)
+            .join(enter => enter.append("line").attr("class", "link"), update => update, exit => exit.remove())
+            .attr("stroke-width", d => Math.sqrt(d.value) + 1);
+
+        const node = container.selectAll(".node")
+            .data(filteredNodes, d => d.id)
+            .join(enter => {
+                const g = enter.append("g").attr("class", "node").call(d3.drag().on("start", dragstart).on("drag", dragged).on("end", dragend));
+                g.append("circle").attr("r", d => Math.sqrt(d.count) * 2 + 5).attr("fill", d => d3.interpolateWarm(0.2 + (d.count / 200)));
+                g.append("text").attr("dy", ".35em").attr("text-anchor", "middle");
+                g.on("click", (e, d) => showStarDetail(d));
+                return g;
+            }, update => update, exit => exit.remove());
+
+        node.select("text").text(d => d.cn_name || d.id);
+        simulation.nodes(filteredNodes);
+        simulation.force("link").links(filteredLinks);
+        simulation.alpha(0.3).restart();
+        simulation.on("tick", () => {
+            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+            node.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    // --- 核心词云渲染函数 ---
+    function renderWordCloud() {
+        cloudContainer.selectAll("*").remove();
+        
+        // 计算每个节点的度（Degree）作为权重
+        const degMap = {};
+        filteredLinks.forEach(l => {
+            const s = l.source.id || l.source, t = l.target.id || l.target;
+            degMap[s] = (degMap[s] || 0) + 1; degMap[t] = (degMap[t] || 0) + 1;
+        });
+
+        const words = filteredNodes.map(n => ({
+            text: n.cn_name || n.id,
+            size: 10 + (degMap[n.id] || 0) * 3, // 权重公式
+            original: n
+        }));
+
+        const layout = d3.layout.cloud()
+            .size([width, height])
+            .words(words)
+            .padding(5)
+            .rotate(() => (~~(Math.random() * 2) * 90)) // 随机横向或纵向
+            .font("Impact")
+            .fontSize(d => d.size)
+            .on("end", draw);
+
+        layout.start();
+
+        function draw(words) {
+            cloudContainer
+                .attr("transform", `translate(${width/2},${height/2})`)
+                .selectAll("text")
+                .data(words)
+                .enter().append("text")
+                .style("font-size", d => d.size + "px")
+                .style("font-family", "Impact")
+                .style("fill", (d, i) => d3.interpolateWarm(Math.random()))
+                .attr("text-anchor", "middle")
+                .attr("transform", d => `translate(${d.x},${d.y})rotate(${d.rotate})`)
+                .text(d => d.text)
+                .style("cursor", "pointer")
+                .on("click", (e, d) => {
+                    showStarDetail(d.original);
+                });
+        }
+    }
+
+    function updateLeaderboard() {
+        const deg = {};
+        filteredLinks.forEach(l => {
+            const s = l.source.id || l.source, t = l.target.id || l.target;
+            deg[s] = (deg[s] || 0) + 1; deg[t] = (deg[t] || 0) + 1;
+        });
+        const sorted = [...filteredNodes].sort((a,b) => (deg[b.id]||0) - (deg[a.id]||0)).slice(0, 10);
+        let html = `<h4 style="color:var(--gold); margin:0 0 15px 0;">🏆 当前活跃影星排行</h4>`;
+        sorted.forEach((n, i) => {
+            html += `<div class="rank-item" onclick="focusOnNode('${n.id}')"><div class="rank-num">${i+1}</div><div style="flex:1"><div style="font-size:14px; font-weight:bold;">${n.cn_name || n.id}</div><div style="font-size:11px; color:#666;">关联度: ${deg[n.id] || 0}</div></div></div>`;
+        });
+        d3.select("#panel-init").html(html);
+    }
+
+    function showStarDetail(d) {
+        // 图谱视觉聚焦
+        const linkedIds = new Set([d.id]);
+        filteredLinks.forEach(l => {
+            const s = l.source.id||l.source, t = l.target.id||l.target;
+            if(s === d.id) linkedIds.add(t); if(t === d.id) linkedIds.add(s);
+        });
+        d3.selectAll(".node").classed("dimmed", n => !linkedIds.has(n.id));
+        d3.selectAll(".link").classed("dimmed", l => (l.source.id||l.source) !== d.id && (l.target.id||l.target) !== d.id);
+        d3.selectAll(".node circle").classed("highlight-node", n => n.id === d.id);
+
+        d3.select("#panel-init").style("display", "none");
+        d3.select("#panel-head-content").style("display", "block");
+        d3.select("#display-name").html(`<a class="wiki-link" href="https://en.wikipedia.org/wiki/${d.id.replace(/ /g,'_')}" target="_blank">${d.cn_name || d.id}</a>`);
+        
+        let meta = `作品数: ${d.count}`;
+        if(d.nicknames?.length) meta += `<div style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;">${d.nicknames.map(n=>`<span style="background:var(--accent); color:white; padding:2px 8px; border-radius:10px; font-size:10px;">${n}</span>`).join('')}</div>`;
+        d3.select("#display-meta").html(meta);
+
+        const rels = filteredLinks.filter(l => (l.source.id||l.source) === d.id || (l.target.id||l.target) === d.id);
+        let html = `<h4 style="margin:15px 0 10px 0; color:#888; font-size:12px; border-bottom:1px solid #333; padding-bottom:5px;">共事朋友圈 (${rels.length})</h4>`;
+        rels.sort((a,b)=>b.value-a.value).forEach((l, idx) => {
+            const oId = (l.source.id||l.source) === d.id ? (l.target.id||l.target) : (l.source.id||l.source);
+            const oNode = rawData.nodes.find(n => n.id === oId);
+            html += `<div class="movie-card"><b style="color:var(--gold); cursor:pointer" onclick="focusOnNode('${oId}')">${oNode?.cn_name || oId}</b><div style="margin-top:8px;">${l.movies.map((m, mi)=>`<div class="movie-row"><span>• <a id="m-${idx}-${mi}" class="wiki-link" style="font-size:12px;" href="https://en.wikipedia.org/wiki/${m.replace(/ /g,'_')}" target="_blank">${m}</a></span><span class="translate-btn" onclick="translateText('${m.replace(/'/g,"\\'")}','m-${idx}-${mi}')">译</span></div>`).join('')}</div></div>`;
+        });
+        d3.select("#display-list").html(html);
+    }
+
+    function resetFocus() {
+        d3.selectAll(".node, .link").classed("dimmed", false);
+        d3.selectAll(".node circle").classed("highlight-node", false);
+        d3.select("#panel-init").style("display", "block");
+        d3.select("#panel-head-content").style("display", "none");
+        d3.select("#display-list").html("");
+    }
+
+    function focusOnNode(id) {
+        if(currentView !== 'graph') switchView('graph');
+        const n = filteredNodes.find(d => d.id === id);
+        if(n) { 
+            showStarDetail(n); 
+            const t = d3.zoomIdentity.translate(width/2 - n.x * 2, height/2 - n.y * 2).scale(2); 
+            svg.transition().duration(750).call(zoom.transform, t); 
+        }
+    }
+
+    async function translateText(t, id) {
+        const el = document.getElementById(id); if(el.getAttribute('data-tr')) return; el.innerText="...";
+        try { const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(t)}`); const j = await res.json(); el.innerText = j[0][0][0]; el.style.color="var(--gold)"; el.setAttribute('data-tr','1'); } catch(e) { el.innerText = t; }
+    }
+
+    function translateAllMovies() { document.querySelectorAll('.translate-btn').forEach((b, i) => setTimeout(() => b.click(), i * 150)); }
+
+    function setupSearch() {
+        const input = document.getElementById('searchInput'), sug = document.getElementById('suggestions');
+        input.oninput = () => {
+            const v = input.value.toLowerCase().trim(); sug.innerHTML = '';
+            if(!v) { sug.style.display='none'; return; }
+            const matches = filteredNodes.filter(n => n.id.toLowerCase().includes(v) || n.cn_name?.includes(v) || n.nicknames?.some(nick => nick.includes(v))).slice(0, 10);
+            if(matches.length) {
+                sug.style.display='block';
+                matches.forEach(m => {
+                    const d = document.createElement('div'); d.className = 'sug-item';
+                    d.innerHTML = `<div>${m.cn_name || m.id}</div><small style="color:#666">${m.id}</small>`;
+                    d.onclick = () => { focusOnNode(m.id); input.value = m.cn_name || m.id; sug.style.display = 'none'; };
+                    sug.appendChild(d);
+                });
+            } else sug.style.display='none';
+        };
+    }
+
+    function dragstart(e) { if (!e.active) simulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; }
+    function dragged(e) { e.subject.fx = e.x; e.subject.fy = e.y; }
+    function dragend(e) { if (!e.active) simulation.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }
+
+    init();
+</script>
+</body>
+</html>
