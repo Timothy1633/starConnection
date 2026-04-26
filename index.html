@@ -2,48 +2,85 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>好莱坞影星关系网 - 词云检索版</title>
+    <title>Star Link Pro - Dynamic WordCloud</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <!-- 引入 D3 词云插件 -->
     <script src="https://cdn.jsdelivr.net/gh/holtzy/D3-graph-gallery@master/LIB/d3.layout.cloud.js"></script>
-    <style>
-        :root { --gold: #d4af37; --bg: #0a0a0a; --panel: #121212; --accent: #e50914; }
-        body { background: var(--bg); color: #eee; margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { background: #000; padding: 10px 30px; display: flex; align-items: center; border-bottom: 2px solid var(--gold); box-shadow: 0 5px 15px rgba(0,0,0,0.5); gap: 20px; z-index: 10; }
-        h1 { color: var(--gold); margin: 0; font-size: 18px; text-transform: uppercase; flex-shrink: 0; }
-        
-        /* 视图切换开关 */
-        .view-toggle { display: flex; background: #1a1a1a; border-radius: 20px; padding: 2px; border: 1px solid #444; margin-left: 10px; }
-        .toggle-btn { padding: 5px 15px; border-radius: 18px; cursor: pointer; font-size: 12px; transition: 0.3s; }
-        .toggle-btn.active { background: var(--gold); color: #000; font-weight: bold; }
+<style>
+        :root { 
+            --gold: #d4af37;
+            --bg: #0d1117;
+            --panel: #161b22;
+            --accent: #8b5cf6;
+            --wiki-blue: #58a6ff;
+            --text-main: #c9d1d9;
+            --text-sub: #8b949e;
+            --border: #30363d;
+            --card-hover: #21262d;
+        }
 
-        .controls { display: flex; align-items: center; gap: 15px; background: #1a1a1a; padding: 5px 15px; border-radius: 10px; border: 1px solid #333; }
-        .slider-group { display: flex; flex-direction: column; font-size: 11px; color: #aaa; }
-        input[type=range] { width: 80px; accent-color: var(--gold); cursor: pointer; }
-        .search-container { position: relative; width: 220px; margin-left: auto; }
-        #searchInput { width: 100%; padding: 8px 15px; border-radius: 20px; border: 1px solid var(--gold); background: #1a1a1a; color: white; outline: none; }
+        body { 
+            background: var(--bg); color: var(--text-main); margin: 0; 
+            font-family: 'Inter', sans-serif; display: flex; flex-direction: column; 
+            height: 100vh; overflow: hidden; 
+        }
+
+        header { 
+            background: rgba(13, 17, 23, 0.8); backdrop-filter: blur(12px);
+            padding: 10px 30px; display: flex; align-items: center; 
+            border-bottom: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+            gap: 20px; z-index: 10; 
+        }
+
+        h1 { color: var(--gold); margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 2px;}
+
+        .cloud-layer text {
+            transition: fill 0.3s, opacity 0.3s, filter 0.3s;
+            cursor: pointer;
+            dominant-baseline: central;
+            text-anchor: middle;
+        }
+
+        .cloud-layer text:hover {
+            opacity: 1 !important;
+            filter: brightness(1.5) drop-shadow(0 0 5px var(--gold));
+        }
+
+        .controls { display: flex; align-items: center; gap: 15px; background: #010409; padding: 5px 15px; border-radius: 10px; border: 1px solid var(--border); }
+        .slider-group { display: flex; align-items: center; gap: 8px; border-right: 1px solid #333; padding-right: 10px; }
+        .slider-group:last-child { border: none; }
+        input[type=range] { width: 70px; accent-color: var(--gold); cursor: pointer; }
         
+        .view-toggle { display: flex; background: #010409; border-radius: 20px; padding: 2px; border: 1px solid var(--border); }
+        .toggle-btn { padding: 5px 15px; border-radius: 18px; cursor: pointer; font-size: 12px; transition: 0.3s; color: var(--text-sub); }
+        .toggle-btn.active { background: var(--gold); color: #0d1117; font-weight: 700; }
+
         main { display: flex; flex: 1; overflow: hidden; }
-        #viz-container { flex: 1; position: relative; cursor: grab; background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%); }
-        #viz { width: 100%; height: 100%; }
+        #viz-container { flex: 1; position: relative; background: radial-gradient(circle at center, #1c2128 0%, #0d1117 100%); }
+        #viz { width: 100%; height: 100%; cursor: grab; }
 
-        /* 样式增强 */
-        .dimmed { opacity: 0.05 !important; }
-        .node text { font-size: 11px; fill: #fff; font-weight: bold; text-shadow: 0 0 3px #000; pointer-events: none; }
-        .link { stroke: #666; stroke-opacity: 0.2; cursor: pointer; transition: 0.3s; }
-        .highlight-node { stroke: #fff !important; stroke-width: 3px !important; }
-
-        #side-panel { width: 400px; background: var(--panel); border-left: 1px solid #333; display: flex; flex-direction: column; }
-        #panel-header { padding: 25px; border-bottom: 1px solid #333; }
+        #side-panel { width: 400px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+        #panel-header { padding: 25px; border-bottom: 1px solid var(--border); }
         #scroll-area { flex: 1; overflow-y: auto; padding: 10px 25px; }
-        .rank-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; margin-bottom: 5px; }
-        .rank-item:hover { background: #1e1e1e; }
-        .rank-num { width: 22px; height: 22px; background: var(--gold); color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; }
-        .movie-card { background: #1e1e1e; padding: 15px; margin-top: 15px; border-radius: 8px; border-left: 4px solid #333; }
-        .movie-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; font-size: 0.9em; }
-        .translate-btn { font-size: 10px; padding: 1px 5px; background: #333; color: #888; border-radius: 3px; cursor: pointer; }
-        #suggestions { position: absolute; top: 110%; left: 0; right: 0; background: #222; border: 1px solid var(--gold); border-radius: 8px; z-index: 1000; max-height: 300px; overflow-y: auto; display: none; }
-        .sug-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #333; }
+
+        .movie-card { background: #0d1117; padding: 15px; margin-top: 15px; border-radius: 10px; border: 1px solid var(--border); }
+        .movie-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+        
+        .wiki-link { color: var(--wiki-blue); text-decoration: none; border-bottom: 1px solid transparent; }
+        .wiki-link:hover { border-bottom-color: var(--wiki-blue); }
+        
+        .translate-btn { font-size: 10px; padding: 2px 6px; background: #21262d; color: var(--text-sub); border-radius: 4px; cursor: pointer; border: 1px solid var(--border); }
+
+        .link { stroke: #444c56; stroke-opacity: 0.3; }
+        .link.active-link { stroke: var(--gold) !important; stroke-opacity: 0.8 !important; stroke-width: 2.5px !important; }
+        .node circle { stroke: #1b1f23; stroke-width: 1.5px; cursor: pointer; }
+        .node.dimmed { opacity: 0.1 !important; filter: grayscale(0.8); }
+        .node.active-focus circle { stroke: var(--gold) !important; stroke-width: 3px !important; }
+        .node text { fill: var(--text-sub); font-size: 10px; pointer-events: none; }
+
+        .search-container { position: relative; width: 150px; margin-left: auto; }
+        #searchInput { width: 100%; padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border); background: #010409; color: var(--text-main); font-size: 12px; outline: none; }
+        #suggestions { position: absolute; top: 110%; left: 0; right: 0; background: #161b22; border: 1px solid var(--border); z-index: 1000; border-radius: 10px; display: none; }
+        .sug-item { padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; }
     </style>
 </head>
 <body>
@@ -51,37 +88,41 @@
 <header>
     <h1>🎬 Star Link</h1>
     <div class="view-toggle">
-        <div id="btn-graph" class="toggle-btn active" onclick="switchView('graph')">图谱模式</div>
-        <div id="btn-cloud" class="toggle-btn" onclick="switchView('cloud')">词云模式</div>
+        <div id="btn-graph" class="toggle-btn active" onclick="switchView('graph')">图谱</div>
+        <div id="btn-cloud" class="toggle-btn" onclick="switchView('cloud')">词云</div>
     </div>
     <div class="controls">
         <div class="slider-group">
-            <label>作品数: <span id="node-val">10</span></label>
+            <label style="font-size:10px;color:#888;">作品数: <span id="node-val">10</span></label>
             <input type="range" id="node-filter" min="1" max="100" value="10">
         </div>
         <div class="slider-group">
-            <label>合作数: <span id="link-val">1</span></label>
+            <label style="font-size:10px;color:var(--gold);">出生区间: <span id="year-range-val">1930 - 2010</span></label>
+            <div style="display:flex; flex-direction:column; gap:2px;">
+                <input type="range" id="year-min-filter" min="1930" max="2010" value="1930">
+                <input type="range" id="year-max-filter" min="1930" max="2010" value="2010">
+            </div>
+        </div>
+        <div class="slider-group">
+            <label style="font-size:10px;color:#888;">合作数: <span id="link-val">1</span></label>
             <input type="range" id="link-filter" min="1" max="10" value="1">
         </div>
     </div>
     <div class="search-container">
-        <input type="text" id="searchInput" placeholder="检索影星..." autocomplete="off">
+        <input type="text" id="searchInput" placeholder="搜索影星..." autocomplete="off">
         <div id="suggestions"></div>
     </div>
 </header>
 
 <main>
-    <div id="viz-container">
-        <svg id="viz"></svg>
-    </div>
+    <div id="viz-container"><svg id="viz"></svg></div>
     <div id="side-panel">
         <div id="panel-header">
             <div id="panel-init"></div>
             <div id="panel-head-content" style="display:none;">
-                <h2 id="display-name" style="margin:0;"></h2>
-                <div id="display-meta" style="color:#888; margin:5px 0 10px 0; font-size:13px;"></div>
-                <button onclick="translateAllMovies()" style="background:none; border:1px solid #555; color:#888; font-size:10px; padding:3px 8px; cursor:pointer;">全页翻译</button>
-                <button onclick="resetFocus()" style="background:none; border:1px solid #555; color:#888; font-size:10px; padding:3px 8px; cursor:pointer; margin-left:5px;">关闭详情</button>
+                <h2 id="display-name" style="margin:0; font-size:22px;"></h2>
+                <div id="display-meta" style="color:#888; margin:10px 0; font-size:12px;"></div>
+                <button onclick="resetFocus()" style="background:none; border:1px solid #444; color:#888; font-size:10px; padding:4px 10px; cursor:pointer; border-radius:20px;">返回全局</button>
             </div>
         </div>
         <div id="scroll-area"><div id="display-list"></div></div>
@@ -91,62 +132,78 @@
 <script>
     let rawData = { nodes: [], links: [] };
     let filteredNodes = [], filteredLinks = [];
-    let currentView = 'graph'; // 'graph' or 'cloud'
+    let currentView = 'graph', focusedNode = null;
+    let cloudLayout = null; // 用于控制词云实例
+
     const width = window.innerWidth - 400, height = window.innerHeight - 70;
-    
-    const svg = d3.select("#viz");
-    const container = svg.append("g").attr("class", "main-container");
-    const cloudContainer = svg.append("g").attr("class", "cloud-container").attr("visibility", "hidden");
+    const svg = d3.select("#viz").attr("viewBox", `0 0 ${width} ${height}`);
+    // 初始定义层级时
+    const container = svg.append("g").attr("class", "graph-layer");
+    const cloudG = svg.append("g")
+        .attr("class", "cloud-layer")
+        .style("display", "none"); // 初始设为 display: none
+    const simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d => d.id).distance(120))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collide", d3.forceCollide().radius(d => Math.sqrt(d.count) * 2 + 12));
 
     const zoom = d3.zoom().scaleExtent([0.1, 8]).on("zoom", (e) => {
         if(currentView === 'graph') container.attr("transform", e.transform);
     });
     svg.call(zoom);
 
-    const simulation = d3.forceSimulation()
-        .force("link", d3.forceLink().id(d => d.id).distance(120))
-        .force("charge", d3.forceManyBody().strength(-400))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collide", d3.forceCollide().radius(40));
+    function getWikiUrl(name) { return `https://en.wikipedia.org/wiki/${name.trim().replace(/ /g, '_')}`; }
+
+    async function translateText(text, elementId) {
+        const el = document.getElementById(elementId);
+        if(!el || el.dataset.tr === "1") return;
+        el.innerText = "翻译中...";
+        try {
+            const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`);
+            const data = await res.json();
+            el.innerHTML = `<span style="color:var(--gold)">${data[0][0][0]}</span> <small style="color:#555">(${text})</small>`;
+            el.dataset.tr = "1";
+        } catch (e) { el.innerText = text; }
+    }
 
     async function init() {
         try {
             const res = await fetch('network_data.json');
             rawData = await res.json();
-            d3.select("#node-filter").attr("max", d3.max(rawData.nodes, d => d.count));
-            d3.select("#link-filter").attr("max", d3.max(rawData.links, d => d.value));
+            const years = rawData.nodes.map(n => parseInt(n.birth_year)).filter(y => !isNaN(y));
+            if (years.length > 0) {
+                const minYear = d3.min(years), maxYear = d3.max(years);
+                document.getElementById("year-min-filter").min = minYear;
+                document.getElementById("year-min-filter").max = maxYear;
+                document.getElementById("year-min-filter").value = minYear;
+                document.getElementById("year-max-filter").min = minYear;
+                document.getElementById("year-max-filter").max = maxYear;
+                document.getElementById("year-max-filter").value = maxYear;
+            }
             updateGraph();
             setupSearch();
             d3.selectAll("input[type=range]").on("input", updateGraph);
-        } catch(e) { alert("请确保数据已生成并在服务器环境下运行。"); }
-    }
-
-    function switchView(view) {
-        currentView = view;
-        d3.selectAll(".toggle-btn").classed("active", false);
-        d3.select(`#btn-${view}`).classed("active", true);
-        
-        if(view === 'graph') {
-            container.attr("visibility", "visible");
-            cloudContainer.attr("visibility", "hidden");
-            simulation.alpha(0.3).restart();
-        } else {
-            container.attr("visibility", "hidden");
-            cloudContainer.attr("visibility", "visible");
-            simulation.stop();
-            renderWordCloud();
-        }
+        } catch(e) { alert("数据加载失败"); }
     }
 
     function updateGraph() {
         const minM = +document.getElementById("node-filter").value;
         const minC = +document.getElementById("link-filter").value;
+        const minYear = +document.getElementById("year-min-filter").value;
+        const maxYear = +document.getElementById("year-max-filter").value;
+
         document.getElementById("node-val").innerText = minM;
         document.getElementById("link-val").innerText = minC;
+        document.getElementById("year-range-val").innerText = `${minYear} - ${maxYear}`;
 
-        const candidates = rawData.nodes.filter(n => n.count >= minM);
+        const candidates = rawData.nodes.filter(n => {
+            const y = parseInt(n.birth_year);
+            const matchYear = isNaN(y) || (y >= minYear && y <= maxYear);
+            return n.count >= minM && matchYear;
+        });
+
         const cIds = new Set(candidates.map(n => n.id));
-
         const tLinks = rawData.links.filter(l => {
             const s = typeof l.source === 'object' ? l.source.id : l.source;
             const t = typeof l.target === 'object' ? l.target.id : l.target;
@@ -170,165 +227,230 @@
     function renderGraph() {
         const link = container.selectAll(".link")
             .data(filteredLinks, d => `${d.source.id || d.source}-${d.target.id || d.target}`)
-            .join(enter => enter.append("line").attr("class", "link"), update => update, exit => exit.remove())
-            .attr("stroke-width", d => Math.sqrt(d.value) + 1);
+            .join("line").attr("class", "link").attr("stroke-width", d => Math.sqrt(d.value) + 1);
 
         const node = container.selectAll(".node")
             .data(filteredNodes, d => d.id)
             .join(enter => {
-                const g = enter.append("g").attr("class", "node").call(d3.drag().on("start", dragstart).on("drag", dragged).on("end", dragend));
+                const g = enter.append("g").attr("class", "node").call(d3.drag()
+                    .on("start", (e) => { if (!e.active) simulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; })
+                    .on("drag", (e) => { e.subject.fx = e.x; e.subject.fy = e.y; })
+                    .on("end", (e) => { if (!e.active) simulation.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }));
                 g.append("circle").attr("r", d => Math.sqrt(d.count) * 2 + 5).attr("fill", d => d3.interpolateWarm(0.2 + (d.count / 200)));
                 g.append("text").attr("dy", ".35em").attr("text-anchor", "middle");
-                g.on("click", (e, d) => showStarDetail(d));
+                g.on("click", (e, d) => { e.stopPropagation(); showStarDetail(d); });
                 return g;
-            }, update => update, exit => exit.remove());
+            });
 
-        node.select("text").text(d => d.cn_name || d.id);
+        node.select("text").text(d => d.id.split(' ').pop());
         simulation.nodes(filteredNodes);
         simulation.force("link").links(filteredLinks);
-        simulation.alpha(0.3).restart();
+        simulation.alpha(1).restart();
         simulation.on("tick", () => {
             link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
             node.attr("transform", d => `translate(${d.x},${d.y})`);
         });
     }
 
-    // --- 核心词云渲染函数 ---
-    function renderWordCloud() {
-        cloudContainer.selectAll("*").remove();
+// --- 核心词云变换逻辑（增强同步性） ---
+function renderWordCloud() {
+    if (cloudLayout) cloudLayout.stop();
+    cloudG.selectAll("*").interrupt().remove();
+
+    if (filteredNodes.length === 0) return;
+
+    let words = [];
+
+    // 情况 A：当选中了某个影星时，词云展示其“社交圈”
+    if (focusedNode) {
+        // 1. 筛选出所有与当前人物相关的连线
+        const partnersLinks = filteredLinks.filter(l => 
+            (l.source.id || l.source) === focusedNode.id || (l.target.id || l.target) === focusedNode.id
+        );
+
+        // 2. 按合作次数 value 从大到小排序（与侧边栏逻辑一致）
+        partnersLinks.sort((a, b) => b.value - a.value);
+
+        // 3. 构建词云数据：合作伙伴的名字
+        words = partnersLinks.map(l => {
+            const partnerId = (l.source.id || l.source) === focusedNode.id ? (l.target.id || l.target) : (l.source.id || l.source);
+            const partnerNode = rawData.nodes.find(n => n.id === partnerId);
+            
+            // 字体大小映射：基础分 20，每合作一次增加 12px
+            return {
+                text: partnerId,
+                size: 20 + (l.value * 12), 
+                original: partnerNode,
+                weight: l.value // 记录权重用于后续可能的显示
+            };
+        });
+
+        // 4. 将自己（主角）加入词云中心，赋予最大字号
+        words.push({ 
+            text: focusedNode.id, 
+            size: 100, 
+            original: focusedNode, 
+            isSelf: true 
+        });
+
+    } else {
+        // 情况 B：全局模式（未选中具体人），展示活跃度前 60 的影星
+        words = filteredNodes
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 60)
+            .map(n => ({
+                text: n.id,
+                size: 20 + Math.sqrt(n.count) * 8,
+                original: n
+            }));
+    }
+
+    // 配置词云生成器
+    cloudLayout = d3.layout.cloud()
+        .size([width - 50, height - 50])
+        .words(words)
+        .padding(5)
+        .rotate(() => (Math.random() > 0.8 ? 90 : 0)) // 减少旋转频率，提高阅读性
+        .font("Impact")
+        .fontSize(d => d.size)
+        .on("end", draw);
+
+    cloudLayout.start();
+
+    function draw(words) {
+        cloudG.attr("transform", `translate(${width/2},${height/2})`)
+            .selectAll("text")
+            .data(words)
+            .join("text")
+            .style("font-family", "Impact, sans-serif")
+            .style("font-size", d => d.size + "px")
+            .style("fill", d => d.isSelf ? "var(--gold)" : d3.interpolateCool(Math.random()))
+            .style("opacity", d => d.isSelf ? 1 : 0.8)
+            .attr("text-anchor", "middle")
+            .attr("transform", d => `translate(${d.x}, ${d.y}) rotate(${d.rotate})`)
+            .text(d => d.text)
+            .on("mouseover", function() { d3.select(this).style("opacity", 1).style("filter", "brightness(1.5)"); })
+            .on("mouseout", function(e, d) { d3.select(this).style("opacity", d.isSelf ? 1 : 0.8).style("filter", "none"); })
+            .on("click", (e, d) => {
+                e.preventDefault();
+                showStarDetail(d.original); // 点击词云中的名字，切换详情并重绘
+            });
+    }
+}
+    function switchView(view) {
+    currentView = view;
+    // 更新按钮状态
+    d3.selectAll(".toggle-btn").classed("active", false);
+    d3.select(`#btn-${view}`).classed("active", true);
+    
+    if(view === 'graph') {
+        // --- 彻底隐藏并停止词云 ---
+        if (cloudLayout) cloudLayout.stop(); // 停止词云的数学计算
+        cloudG.style("display", "none");     // 彻底不渲染
         
-        // 计算每个节点的度（Degree）作为权重
-        const degMap = {};
-        filteredLinks.forEach(l => {
-            const s = l.source.id || l.source, t = l.target.id || l.target;
-            degMap[s] = (degMap[s] || 0) + 1; degMap[t] = (degMap[t] || 0) + 1;
-        });
-
-        const words = filteredNodes.map(n => ({
-            text: n.cn_name || n.id,
-            size: 10 + (degMap[n.id] || 0) * 3, // 权重公式
-            original: n
-        }));
-
-        const layout = d3.layout.cloud()
-            .size([width, height])
-            .words(words)
-            .padding(5)
-            .rotate(() => (~~(Math.random() * 2) * 90)) // 随机横向或纵向
-            .font("Impact")
-            .fontSize(d => d.size)
-            .on("end", draw);
-
-        layout.start();
-
-        function draw(words) {
-            cloudContainer
-                .attr("transform", `translate(${width/2},${height/2})`)
-                .selectAll("text")
-                .data(words)
-                .enter().append("text")
-                .style("font-size", d => d.size + "px")
-                .style("font-family", "Impact")
-                .style("fill", (d, i) => d3.interpolateWarm(Math.random()))
-                .attr("text-anchor", "middle")
-                .attr("transform", d => `translate(${d.x},${d.y})rotate(${d.rotate})`)
-                .text(d => d.text)
-                .style("cursor", "pointer")
-                .on("click", (e, d) => {
-                    showStarDetail(d.original);
-                });
-        }
+        // --- 显示并激活图谱 ---
+        container.style("display", "inline"); // 显示图谱层
+        simulation.alpha(0.3).restart();      // 重新启动力导向模拟
+    } else {
+        // --- 彻底隐藏并停止图谱 ---
+        simulation.stop();                    // 停止力导向计算，节省性能
+        container.style("display", "none");   // 彻底不渲染
+        
+        // --- 显示并生成词云 ---
+        cloudG.style("display", "inline");    // 显示词云层
+        renderWordCloud();                    // 执行词云生成逻辑
     }
-
-    function updateLeaderboard() {
-        const deg = {};
-        filteredLinks.forEach(l => {
-            const s = l.source.id || l.source, t = l.target.id || l.target;
-            deg[s] = (deg[s] || 0) + 1; deg[t] = (deg[t] || 0) + 1;
-        });
-        const sorted = [...filteredNodes].sort((a,b) => (deg[b.id]||0) - (deg[a.id]||0)).slice(0, 10);
-        let html = `<h4 style="color:var(--gold); margin:0 0 15px 0;">🏆 当前活跃影星排行</h4>`;
-        sorted.forEach((n, i) => {
-            html += `<div class="rank-item" onclick="focusOnNode('${n.id}')"><div class="rank-num">${i+1}</div><div style="flex:1"><div style="font-size:14px; font-weight:bold;">${n.cn_name || n.id}</div><div style="font-size:11px; color:#666;">关联度: ${deg[n.id] || 0}</div></div></div>`;
-        });
-        d3.select("#panel-init").html(html);
-    }
+}
 
     function showStarDetail(d) {
-        // 图谱视觉聚焦
-        const linkedIds = new Set([d.id]);
-        filteredLinks.forEach(l => {
-            const s = l.source.id||l.source, t = l.target.id||l.target;
-            if(s === d.id) linkedIds.add(t); if(t === d.id) linkedIds.add(s);
-        });
-        d3.selectAll(".node").classed("dimmed", n => !linkedIds.has(n.id));
-        d3.selectAll(".link").classed("dimmed", l => (l.source.id||l.source) !== d.id && (l.target.id||l.target) !== d.id);
-        d3.selectAll(".node circle").classed("highlight-node", n => n.id === d.id);
+        if (!d) return;
+        focusedNode = d;
+        
+        // 关键：如果在词云模式下点击，立即触发重绘变换
+        if (currentView === 'cloud') renderWordCloud();
 
+        const linkedNodeIds = new Set([d.id]);
+        d3.selectAll(".link").classed("active-link", l => {
+            const isS = (l.source.id || l.source) === d.id, isT = (l.target.id || l.target) === d.id;
+            if (isS || isT) {
+                linkedNodeIds.add(l.source.id || l.source);
+                linkedNodeIds.add(l.target.id || l.target);
+                return true;
+            }
+            return false;
+        });
+
+        d3.selectAll(".node").classed("dimmed", n => !linkedNodeIds.has(n.id)).classed("active-focus", n => n.id === d.id);
         d3.select("#panel-init").style("display", "none");
         d3.select("#panel-head-content").style("display", "block");
-        d3.select("#display-name").html(`<a class="wiki-link" href="https://en.wikipedia.org/wiki/${d.id.replace(/ /g,'_')}" target="_blank">${d.cn_name || d.id}</a>`);
-        
-        let meta = `作品数: ${d.count}`;
-        if(d.nicknames?.length) meta += `<div style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;">${d.nicknames.map(n=>`<span style="background:var(--accent); color:white; padding:2px 8px; border-radius:10px; font-size:10px;">${n}</span>`).join('')}</div>`;
-        d3.select("#display-meta").html(meta);
+        d3.select("#display-name").html(`<a class="wiki-link" href="${getWikiUrl(d.id)}" target="_blank">${d.id} ↗</a>`);
+        d3.select("#display-meta").html(`<b>出生:</b> ${d.birth_year || '未知'} | <b>作品:</b> ${d.count} | <b>关联:</b> ${linkedNodeIds.size - 1}`);
 
         const rels = filteredLinks.filter(l => (l.source.id||l.source) === d.id || (l.target.id||l.target) === d.id);
-        let html = `<h4 style="margin:15px 0 10px 0; color:#888; font-size:12px; border-bottom:1px solid #333; padding-bottom:5px;">共事朋友圈 (${rels.length})</h4>`;
+        let html = "";
         rels.sort((a,b)=>b.value-a.value).forEach((l, idx) => {
             const oId = (l.source.id||l.source) === d.id ? (l.target.id||l.target) : (l.source.id||l.source);
-            const oNode = rawData.nodes.find(n => n.id === oId);
-            html += `<div class="movie-card"><b style="color:var(--gold); cursor:pointer" onclick="focusOnNode('${oId}')">${oNode?.cn_name || oId}</b><div style="margin-top:8px;">${l.movies.map((m, mi)=>`<div class="movie-row"><span>• <a id="m-${idx}-${mi}" class="wiki-link" style="font-size:12px;" href="https://en.wikipedia.org/wiki/${m.replace(/ /g,'_')}" target="_blank">${m}</a></span><span class="translate-btn" onclick="translateText('${m.replace(/'/g,"\\'")}','m-${idx}-${mi}')">译</span></div>`).join('')}</div></div>`;
+            html += `<div class="movie-card">
+                <div style="display:flex; justify-content:space-between; cursor:pointer;" onclick="focusOnNode('${oId}')">
+                    <b style="color:var(--wiki-blue)">${oId}</b>
+                    <span style="font-size:11px; color:var(--gold);">${l.value} 次合作</span>
+                </div>`;
+            l.movies.forEach((m, mi) => {
+                const mid = `m-${idx}-${mi}`;
+                html += `<div class="movie-row">
+                    <span style="font-size:12px;"><a class="wiki-link" href="${getWikiUrl(m)}" target="_blank" id="${mid}">🎬 ${m}</a></span>
+                    <button class="translate-btn" onclick="translateText('${m.replace(/'/g,"\\'")}', '${mid}')">译</button>
+                </div>`;
+            });
+            html += `</div>`;
         });
         d3.select("#display-list").html(html);
     }
 
     function resetFocus() {
-        d3.selectAll(".node, .link").classed("dimmed", false);
-        d3.selectAll(".node circle").classed("highlight-node", false);
+        focusedNode = null;
+        d3.selectAll(".node").classed("dimmed", false).classed("active-focus", false);
+        d3.selectAll(".link").classed("active-link", false);
         d3.select("#panel-init").style("display", "block");
         d3.select("#panel-head-content").style("display", "none");
         d3.select("#display-list").html("");
+        if (currentView === 'cloud') renderWordCloud();
     }
 
     function focusOnNode(id) {
-        if(currentView !== 'graph') switchView('graph');
-        const n = filteredNodes.find(d => d.id === id);
-        if(n) { 
-            showStarDetail(n); 
-            const t = d3.zoomIdentity.translate(width/2 - n.x * 2, height/2 - n.y * 2).scale(2); 
-            svg.transition().duration(750).call(zoom.transform, t); 
-        }
+        const n = rawData.nodes.find(d => d.id === id);
+        if(n) showStarDetail(n);
     }
-
-    async function translateText(t, id) {
-        const el = document.getElementById(id); if(el.getAttribute('data-tr')) return; el.innerText="...";
-        try { const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(t)}`); const j = await res.json(); el.innerText = j[0][0][0]; el.style.color="var(--gold)"; el.setAttribute('data-tr','1'); } catch(e) { el.innerText = t; }
-    }
-
-    function translateAllMovies() { document.querySelectorAll('.translate-btn').forEach((b, i) => setTimeout(() => b.click(), i * 150)); }
 
     function setupSearch() {
         const input = document.getElementById('searchInput'), sug = document.getElementById('suggestions');
         input.oninput = () => {
-            const v = input.value.toLowerCase().trim(); sug.innerHTML = '';
+            const v = input.value.toLowerCase();
+            sug.innerHTML = '';
             if(!v) { sug.style.display='none'; return; }
-            const matches = filteredNodes.filter(n => n.id.toLowerCase().includes(v) || n.cn_name?.includes(v) || n.nicknames?.some(nick => nick.includes(v))).slice(0, 10);
+            const matches = rawData.nodes.filter(n => n.id.toLowerCase().includes(v)).slice(0, 8);
             if(matches.length) {
                 sug.style.display='block';
                 matches.forEach(m => {
-                    const d = document.createElement('div'); d.className = 'sug-item';
-                    d.innerHTML = `<div>${m.cn_name || m.id}</div><small style="color:#666">${m.id}</small>`;
-                    d.onclick = () => { focusOnNode(m.id); input.value = m.cn_name || m.id; sug.style.display = 'none'; };
-                    sug.appendChild(d);
+                    const div = document.createElement('div'); div.className = 'sug-item';
+                    div.innerText = m.id;
+                    div.onclick = () => { focusOnNode(m.id); sug.style.display='none'; input.value = m.id; };
+                    sug.appendChild(div);
                 });
             } else sug.style.display='none';
         };
     }
 
-    function dragstart(e) { if (!e.active) simulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; }
-    function dragged(e) { e.subject.fx = e.x; e.subject.fy = e.y; }
-    function dragend(e) { if (!e.active) simulation.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }
+    function updateLeaderboard() {
+        const sorted = [...filteredNodes].sort((a,b) => b.count - a.count).slice(0, 10);
+        let html = `<h4 style="color:var(--gold); margin-bottom:15px; font-size:14px;">影星榜</h4>`;
+        sorted.forEach((n, i) => {
+            html += `<div style="margin-bottom:10px; font-size:13px; cursor:pointer;" onclick="focusOnNode('${n.id}')">
+                <span style="color:var(--gold); font-weight:bold;">${i+1}.</span> ${n.id}
+            </div>`;
+        });
+        d3.select("#panel-init").html(html);
+    }
 
     init();
 </script>
